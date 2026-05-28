@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import http from 'http';
 import {
   Client,
   GatewayIntentBits,
@@ -12,6 +13,15 @@ import {
 } from 'discord.js';
 import { ethers } from 'ethers';
 import QRCode from 'qrcode';
+
+// ── Health server (keeps the Replit workflow alive) ───────────
+const PORT = process.env.PORT || 8080;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('OK');
+}).listen(PORT, () => {
+  console.log(`Health server listening on port ${PORT}`);
+});
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 

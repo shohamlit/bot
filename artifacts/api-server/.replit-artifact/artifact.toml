@@ -19,3 +19,6 @@ args = ["node", "artifacts/api-server/src/index.js"]
 
 [services.production.run.env]
 NODE_ENV = "production"
+
+[services.production.health.startup]
+path = "/api"
