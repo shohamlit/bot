@@ -26,6 +26,7 @@ const CT = [0, 1, 2];
 // ── Command Definitions ───────────────────────────────────────
 const commands = [
 
+  // ── /bep20 ────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('bep20')
     .setDescription('Generate a BEP20 USDT payment QR code and listen for confirmation.')
@@ -38,6 +39,46 @@ const commands = [
     .setIntegrationTypes(IT)
     .setContexts(CT),
 
+  // ── /math ─────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('math')
+    .setDescription('Solve a math expression instantly.')
+    .addStringOption((o) =>
+      o.setName('expression')
+        .setDescription('The math expression to evaluate (e.g. 2 + 2, (5^2) * 3 / 2)')
+        .setRequired(true)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /currency ─────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('currency')
+    .setDescription('Convert an amount between currencies using live exchange rates.')
+    .addNumberOption((o) =>
+      o.setName('amount')
+        .setDescription('The amount to convert (e.g. 100)')
+        .setRequired(true)
+        .setMinValue(0)
+    )
+    .addStringOption((o) =>
+      o.setName('from')
+        .setDescription('Source currency code (e.g. USD)')
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(3)
+    )
+    .addStringOption((o) =>
+      o.setName('to')
+        .setDescription('Target currency code (e.g. EUR)')
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(3)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /hug ──────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('hug')
     .setDescription('Send a warm hug to someone!')
@@ -47,6 +88,7 @@ const commands = [
     .setIntegrationTypes(IT)
     .setContexts(CT),
 
+  // ── /pat ──────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('pat')
     .setDescription('Give someone a gentle pat on the head!')
@@ -56,12 +98,64 @@ const commands = [
     .setIntegrationTypes(IT)
     .setContexts(CT),
 
+  // ── /slap ─────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('slap')
+    .setDescription('Slap someone — they had it coming.')
+    .addUserOption((o) =>
+      o.setName('target').setDescription('The person to slap').setRequired(true)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /kick ─────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('Give someone a solid kick!')
+    .addUserOption((o) =>
+      o.setName('target').setDescription('The person to kick').setRequired(true)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /kiss ─────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('kiss')
+    .setDescription('Blow a kiss to someone special!')
+    .addUserOption((o) =>
+      o.setName('target').setDescription('The person to kiss').setRequired(true)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /wink ─────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('wink')
+    .setDescription('Give someone a cheeky wink!')
+    .addUserOption((o) =>
+      o.setName('target').setDescription('The person to wink at').setRequired(true)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /glare ────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('glare')
+    .setDescription('Give someone an intense glare.')
+    .addUserOption((o) =>
+      o.setName('target').setDescription('The person to glare at').setRequired(true)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /rps ──────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('rps')
     .setDescription('Issue an open Rock Paper Scissors challenge — first to accept fights you!')
     .setIntegrationTypes(IT)
     .setContexts(CT),
 
+  // ── /tictactoe ────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('tictactoe')
     .setDescription('Issue an open Tic-Tac-Toe challenge — first to accept plays you!')

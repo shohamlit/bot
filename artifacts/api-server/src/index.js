@@ -17,13 +17,24 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const COLLECTOR_TIMEOUT = 2 * 60 * 1000; // 2 minutes
 
 const TTT_WIN_LINES = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-  [0, 3, 6], [1, 4, 7], [2, 5, 8], // cols
-  [0, 4, 8], [2, 4, 6],             // diagonals
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6],
 ];
 
-const RPS_EMOJI  = { rock: '🪨', paper: '📄', scissors: '✂️' };
-const RPS_BEATS  = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+const RPS_EMOJI = { rock: '🪨', paper: '📄', scissors: '✂️' };
+const RPS_BEATS = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
+
+// Map each action command to its some-random-api endpoint and display config
+const ACTION_CONFIG = {
+  hug:   { endpoint: 'hug',   color: 0xFF69B4, emoji: '🤗', verb: 'wraps',         suffix: 'in a warm hug!',             footer: 'Spreading the love ❤️'  },
+  pat:   { endpoint: 'pat',   color: 0x7ED56F, emoji: '👋', verb: 'gives',          suffix: 'a gentle pat on the head!',  footer: 'So sweet! 🌸'           },
+  slap:  { endpoint: 'slap',  color: 0xFF4500, emoji: '👋', verb: 'slaps',          suffix: 'right across the face!',     footer: 'They had it coming 💀'  },
+  kick:  { endpoint: 'punch', color: 0xC0392B, emoji: '🦵', verb: 'kicks',          suffix: 'into next week!',            footer: 'Boots of justice 👟'    },
+  kiss:  { endpoint: 'kiss',  color: 0xFF1493, emoji: '💋', verb: 'plants a kiss on', suffix: '\'s cheek! 😘',           footer: 'Caught in 4K 💕'        },
+  wink:  { endpoint: 'wink',  color: 0x9B59B6, emoji: '😉', verb: 'gives',          suffix: 'a cheeky wink!',             footer: 'Say less 😏'            },
+  glare: { endpoint: 'stare', color: 0x2C3E50, emoji: '😒', verb: 'glares intensely at', suffix: '.',                    footer: 'Tension level: maximum 🧊' },
+};
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -34,7 +45,7 @@ async function fetchAnimuGif(endpoint) {
 }
 
 async function buildVictoryEmbed(winner, title, description) {
-  const gif = await fetchAnimuGif('wink').catch(() => null);
+  const gif   = await fetchAnimuGif('wink').catch(() => null);
   const embed = new EmbedBuilder()
     .setColor(0xFFD700)
     .setTitle(title)
@@ -42,6 +53,23 @@ async function buildVictoryEmbed(winner, title, description) {
     .setFooter({ text: 'GG WP! 🏆' });
   if (gif) embed.setImage(gif);
   return embed;
+}
+
+// ── Safe Math Evaluator ───────────────────────────────────────
+
+function safeEval(expression) {
+  // Whitelist: digits, basic operators, parentheses, decimal points, spaces
+  // Also allow ^ as alias for ** (exponentiation)
+  const sanitized = expression.trim().replace(/\^/g, '**');
+  if (!/^[\d+\-*/().\s%]+$/.test(sanitized)) {
+    throw new Error('Expression contains invalid characters. Only numbers and `+ - * / % ^ ( )` are allowed.');
+  }
+  // eslint-disable-next-line no-new-func
+  const result = Function(`'use strict'; return (${sanitized})`)();
+  if (typeof result !== 'number' || !isFinite(result)) {
+    throw new Error('Expression produced an invalid result (e.g. division by zero).');
+  }
+  return result;
 }
 
 // ── Tic-Tac-Toe Utilities ─────────────────────────────────────
@@ -77,33 +105,144 @@ function checkTttWinner(board) {
   return null;
 }
 
-// ── Command: /hug ─────────────────────────────────────────────
+// ── Command: /math ────────────────────────────────────────────
 
-async function handleHug(interaction) {
-  await interaction.deferReply();
-  const target = interaction.options.getUser('target');
-  const gif    = await fetchAnimuGif('hug');
-  const embed  = new EmbedBuilder()
-    .setColor(0xFF69B4)
-    .setTitle('💗 Hug!')
-    .setDescription(`**${interaction.user}** wraps **${target}** in a warm hug! 🤗`)
-    .setImage(gif)
-    .setFooter({ text: 'Spreading the love ❤️' });
-  await interaction.editReply({ embeds: [embed] });
+async function handleMath(interaction) {
+  const expression = interaction.options.getString('expression');
+  let result;
+  try {
+    result = safeEval(expression);
+  } catch (err) {
+    await interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Invalid Expression')
+          .setDescription(err.message)
+          .setFooter({ text: 'Example: (5^2 + 10) / 2' }),
+      ],
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const formatted = Number.isInteger(result)
+    ? result.toLocaleString()
+    : parseFloat(result.toFixed(10)).toLocaleString();
+
+  await interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('🧮 Math Result')
+        .addFields(
+          { name: 'Expression', value: `\`${expression}\``, inline: false },
+          { name: 'Result',     value: `\`\`\`${formatted}\`\`\``,   inline: false },
+        )
+        .setFooter({ text: 'Use ^ for exponentiation, % for modulo' }),
+    ],
+  });
 }
 
-// ── Command: /pat ─────────────────────────────────────────────
+// ── Command: /currency ────────────────────────────────────────
 
-async function handlePat(interaction) {
+async function handleCurrency(interaction) {
   await interaction.deferReply();
+
+  const amount = interaction.options.getNumber('amount');
+  const from   = interaction.options.getString('from').toUpperCase();
+  const to     = interaction.options.getString('to').toUpperCase();
+
+  let data;
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
+    data = await res.json();
+  } catch {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Network Error')
+          .setDescription('Could not reach the exchange rate API. Please try again.'),
+      ],
+    });
+    return;
+  }
+
+  if (data.result === 'error') {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Unknown Currency')
+          .setDescription(`**${from}** is not a valid currency code.\nUse standard 3-letter codes like \`USD\`, \`EUR\`, \`GBP\`, \`INR\`.`),
+      ],
+    });
+    return;
+  }
+
+  const rate = data.rates[to];
+  if (!rate) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Unknown Currency')
+          .setDescription(`**${to}** is not a valid currency code.\nUse standard 3-letter codes like \`USD\`, \`EUR\`, \`GBP\`, \`INR\`.`),
+      ],
+    });
+    return;
+  }
+
+  const converted = (amount * rate).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  });
+  const rateFormatted = rate.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 6,
+  });
+  const updatedAt = new Date(data.time_last_update_utc).toUTCString();
+
+  await interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setTitle('💱 Currency Conversion')
+        .addFields(
+          { name: 'Amount',    value: `**${amount.toLocaleString()} ${from}**`,          inline: true  },
+          { name: 'Converted', value: `**${converted} ${to}**`,                          inline: true  },
+          { name: 'Rate',      value: `\`1 ${from} = ${rateFormatted} ${to}\``,          inline: false },
+        )
+        .setFooter({ text: `Rates updated: ${updatedAt}` }),
+    ],
+  });
+}
+
+// ── Action Commands (/hug, /pat, /slap, /kick, /kiss, /wink, /glare) ─────────
+
+async function handleAction(interaction) {
+  await interaction.deferReply();
+  const cmd    = interaction.commandName;
+  const cfg    = ACTION_CONFIG[cmd];
   const target = interaction.options.getUser('target');
-  const gif    = await fetchAnimuGif('pat');
-  const embed  = new EmbedBuilder()
-    .setColor(0x7ED56F)
-    .setTitle('👋 Pat!')
-    .setDescription(`**${interaction.user}** gives **${target}** a gentle pat on the head! 🥰`)
+  const sender = interaction.user;
+
+  let gif;
+  try {
+    gif = await fetchAnimuGif(cfg.endpoint);
+  } catch {
+    await interaction.editReply({ content: '❌ Could not fetch a GIF right now. Try again!' });
+    return;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(cfg.color)
+    .setTitle(`${cfg.emoji} ${cmd.charAt(0).toUpperCase() + cmd.slice(1)}!`)
+    .setDescription(`**${sender}** ${cfg.verb} **${target}** ${cfg.suffix}`)
     .setImage(gif)
-    .setFooter({ text: 'So sweet! 🌸' });
+    .setFooter({ text: cfg.footer });
+
   await interaction.editReply({ embeds: [embed] });
 }
 
@@ -132,7 +271,6 @@ async function handleRps(interaction) {
     fetchReply: true,
   });
 
-  // ── Wait for a challenger to accept ──────────────────────────
   const acceptCollector = msg.createMessageComponentCollector({
     componentType: ComponentType.Button,
     filter: (i) => i.customId === 'rps_accept' && i.user.id !== host.id,
@@ -171,7 +309,6 @@ async function handleRps(interaction) {
 
     await acceptInteraction.update({ embeds: [gameEmbed], components: [rpsRow] });
 
-    // ── Collect moves from both players ──────────────────────
     const gameCollector = msg.createMessageComponentCollector({
       componentType: ComponentType.Button,
       filter: (i) =>
@@ -220,7 +357,7 @@ async function handleRps(interaction) {
               .setTitle("🤝 It's a Draw!")
               .setDescription(`Both chose **${RPS_EMOJI[hostMove]} ${hostMove}**. No winner this time!`)
               .addFields(
-                { name: host.username,       value: `${RPS_EMOJI[hostMove]} ${hostMove}`,       inline: true },
+                { name: host.username,       value: `${RPS_EMOJI[hostMove]} ${hostMove}`,             inline: true },
                 { name: challenger.username, value: `${RPS_EMOJI[challengerMove]} ${challengerMove}`, inline: true },
               ),
           ],
@@ -229,10 +366,10 @@ async function handleRps(interaction) {
         return;
       }
 
-      const winner      = RPS_BEATS[hostMove] === challengerMove ? host : challenger;
-      const loser       = winner.id === host.id ? challenger : host;
-      const winnerMove  = moves[winner.id];
-      const loserMove   = moves[loser.id];
+      const winner     = RPS_BEATS[hostMove] === challengerMove ? host : challenger;
+      const loser      = winner.id === host.id ? challenger : host;
+      const winnerMove = moves[winner.id];
+      const loserMove  = moves[loser.id];
 
       const victoryEmbed = await buildVictoryEmbed(
         winner,
@@ -295,7 +432,6 @@ async function handleTictactoe(interaction) {
     fetchReply: true,
   });
 
-  // ── Wait for a challenger to accept ──────────────────────────
   const acceptCollector = msg.createMessageComponentCollector({
     componentType: ComponentType.Button,
     filter: (i) => i.customId === 'ttt_accept' && i.user.id !== host.id,
@@ -324,7 +460,6 @@ async function handleTictactoe(interaction) {
       components: buildTttRows(board),
     });
 
-    // ── Game loop collector ───────────────────────────────────
     const gameCollector = msg.createMessageComponentCollector({
       componentType: ComponentType.Button,
       filter: (i) => i.customId.startsWith('ttt_') && i.customId !== 'ttt_accept',
@@ -336,16 +471,15 @@ async function handleTictactoe(interaction) {
         await btnInteraction.reply({ content: `⛔ It's not your turn!`, ephemeral: true });
         return;
       }
-
       const idx = parseInt(btnInteraction.customId.split('_')[1]);
       if (board[idx] !== '') {
         await btnInteraction.reply({ content: '⚠️ That square is already taken!', ephemeral: true });
         return;
       }
 
-      board[idx] = currentMark;
-      const winner = checkTttWinner(board);
-      const isDraw = !winner && board.every((v) => v !== '');
+      board[idx]     = currentMark;
+      const winner   = checkTttWinner(board);
+      const isDraw   = !winner && board.every((v) => v !== '');
 
       if (winner) {
         gameCollector.stop('win');
@@ -424,8 +558,15 @@ client.on('interactionCreate', async (interaction) => {
 
   try {
     switch (interaction.commandName) {
-      case 'hug':       return await handleHug(interaction);
-      case 'pat':       return await handlePat(interaction);
+      case 'math':      return await handleMath(interaction);
+      case 'currency':  return await handleCurrency(interaction);
+      case 'hug':
+      case 'pat':
+      case 'slap':
+      case 'kick':
+      case 'kiss':
+      case 'wink':
+      case 'glare':     return await handleAction(interaction);
       case 'rps':       return await handleRps(interaction);
       case 'tictactoe': return await handleTictactoe(interaction);
       default: break;
