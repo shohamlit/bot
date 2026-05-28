@@ -14,11 +14,20 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "axios": "^1.16.1",
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
     "ethers": "^6.13.2",
     "qrcode": "^1.5.4"
   },
-  "keywords": ["discord", "bot", "bep20", "usdt", "bsc", "crypto", "payment"],
+  "keywords": [
+    "discord",
+    "bot",
+    "bep20",
+    "usdt",
+    "bsc",
+    "crypto",
+    "payment"
+  ],
   "license": "MIT"
 }

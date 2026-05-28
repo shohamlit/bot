@@ -13,6 +13,7 @@ import {
 } from 'discord.js';
 import { ethers } from 'ethers';
 import QRCode from 'qrcode';
+import axios from 'axios';
 
 // ── Health server (keeps the Replit workflow alive) ───────────
 const PORT = process.env.PORT || 8080;
@@ -63,18 +64,10 @@ const ACTION_CONFIG = {
 // ── Helpers ───────────────────────────────────────────────────
 
 async function fetchAnimuGif(apiUrl, gifField) {
-  const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch(apiUrl, { signal: controller.signal });
-    if (!res.ok) throw new Error(`API returned ${res.status}`);
-    const data = await res.json();
-    const gifUrl = data[gifField];
-    if (!gifUrl) throw new Error('No gif URL in API response');
-    return gifUrl;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const response = await axios.get(apiUrl, { timeout: 8000 });
+  const gifUrl = response.data[gifField];
+  if (!gifUrl) throw new Error('No gif URL in API response');
+  return gifUrl;
 }
 
 async function buildVictoryEmbed(winner, title, description) {
@@ -263,7 +256,8 @@ async function handleAction(interaction) {
   let gif;
   try {
     gif = await fetchAnimuGif(cfg.apiUrl, cfg.gifField);
-  } catch {
+  } catch (error) {
+    console.error('API Fetch Error:', error);
     await interaction.editReply('API is currently down, please try again later.');
     return;
   }
