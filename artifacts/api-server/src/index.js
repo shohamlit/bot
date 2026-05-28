@@ -49,37 +49,36 @@ const ERC20_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
-// ── Map each action command to its some-random-api endpoint and display config
+// ── Map each action command to its API URL, response field, and display config
 const ACTION_CONFIG = {
-  hug:   { endpoint: 'hug',   color: 0xFF69B4, emoji: '🤗', verb: 'wraps',         suffix: 'in a warm hug!',             footer: 'Spreading the love ❤️'  },
-  pat:   { endpoint: 'pat',   color: 0x7ED56F, emoji: '👋', verb: 'gives',          suffix: 'a gentle pat on the head!',  footer: 'So sweet! 🌸'           },
-  slap:  { endpoint: 'slap',  color: 0xFF4500, emoji: '👋', verb: 'slaps',          suffix: 'right across the face!',     footer: 'They had it coming 💀'  },
-  kick:  { endpoint: 'punch', color: 0xC0392B, emoji: '🦵', verb: 'kicks',          suffix: 'into next week!',            footer: 'Boots of justice 👟'    },
-  kiss:  { endpoint: 'kiss',  color: 0xFF1493, emoji: '💋', verb: 'plants a kiss on', suffix: '\'s cheek! 😘',           footer: 'Caught in 4K 💕'        },
-  wink:  { endpoint: 'wink',  color: 0x9B59B6, emoji: '😉', verb: 'gives',          suffix: 'a cheeky wink!',             footer: 'Say less 😏'            },
-  glare: { endpoint: 'stare', color: 0x2C3E50, emoji: '😒', verb: 'glares intensely at', suffix: '.',                    footer: 'Tension level: maximum 🧊' },
+  hug:   { apiUrl: 'https://api.waifu.pics/sfw/hug',   gifField: 'url',  color: 0xFF69B4, emoji: '🤗', verb: 'wraps',              suffix: 'in a warm hug!',            footer: 'Spreading the love ❤️'      },
+  pat:   { apiUrl: 'https://api.waifu.pics/sfw/pat',   gifField: 'url',  color: 0x7ED56F, emoji: '👋', verb: 'gives',              suffix: 'a gentle pat on the head!', footer: 'So sweet! 🌸'               },
+  slap:  { apiUrl: 'https://api.waifu.pics/sfw/slap',  gifField: 'url',  color: 0xFF4500, emoji: '👋', verb: 'slaps',              suffix: 'right across the face!',    footer: 'They had it coming 💀'      },
+  kick:  { apiUrl: 'https://some-random-api.com/animu/punch', gifField: 'link', color: 0xC0392B, emoji: '🦵', verb: 'kicks',       suffix: 'into next week!',           footer: 'Boots of justice 👟'        },
+  kiss:  { apiUrl: 'https://api.waifu.pics/sfw/kiss',  gifField: 'url',  color: 0xFF1493, emoji: '💋', verb: 'plants a kiss on',   suffix: '\'s cheek! 😘',             footer: 'Caught in 4K 💕'            },
+  wink:  { apiUrl: 'https://api.waifu.pics/sfw/wink',  gifField: 'url',  color: 0x9B59B6, emoji: '😉', verb: 'gives',              suffix: 'a cheeky wink!',            footer: 'Say less 😏'                },
+  glare: { apiUrl: 'https://some-random-api.com/animu/stare', gifField: 'link', color: 0x2C3E50, emoji: '😒', verb: 'glares intensely at', suffix: '.',              footer: 'Tension level: maximum 🧊'  },
 };
 
 // ── Helpers ───────────────────────────────────────────────────
 
-async function fetchAnimuGif(endpoint) {
+async function fetchAnimuGif(apiUrl, gifField) {
   const controller = new AbortController();
-  const timeout    = setTimeout(() => controller.abort(), 8000); // 8s timeout
+  const timeout    = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(`https://some-random-api.com/animu/${endpoint}`, {
-      signal: controller.signal,
-    });
+    const res = await fetch(apiUrl, { signal: controller.signal });
     if (!res.ok) throw new Error(`API returned ${res.status}`);
     const data = await res.json();
-    if (!data.link) throw new Error('No link in API response');
-    return data.link;
+    const gifUrl = data[gifField];
+    if (!gifUrl) throw new Error('No gif URL in API response');
+    return gifUrl;
   } finally {
     clearTimeout(timeout);
   }
 }
 
 async function buildVictoryEmbed(winner, title, description) {
-  const gif   = await fetchAnimuGif('wink').catch(() => null);
+  const gif   = await fetchAnimuGif('https://api.waifu.pics/sfw/wink', 'url').catch(() => null);
   const embed = new EmbedBuilder()
     .setColor(0xFFD700)
     .setTitle(title)
@@ -263,7 +262,7 @@ async function handleAction(interaction) {
 
   let gif;
   try {
-    gif = await fetchAnimuGif(cfg.endpoint);
+    gif = await fetchAnimuGif(cfg.apiUrl, cfg.gifField);
   } catch {
     await interaction.editReply('API is currently down, please try again later.');
     return;
