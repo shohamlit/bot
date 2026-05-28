@@ -1,13 +1,24 @@
 {
   "name": "@workspace/discord-bot",
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Discord bot that generates BEP20 USDT payment QR codes and confirms transactions on-chain.",
   "private": true,
   "type": "module",
+  "main": "src/index.js",
   "scripts": {
+    "start": "node src/index.js",
     "dev": "node src/index.js",
-    "start": "node src/index.js"
+    "deploy": "node src/deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
-    "discord.js": "^14.19.3"
-  }
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.2",
+    "qrcode": "^1.5.4"
+  },
+  "keywords": ["discord", "bot", "bep20", "usdt", "bsc", "crypto", "payment"],
+  "license": "MIT"
 }
