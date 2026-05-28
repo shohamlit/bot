@@ -8,7 +8,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
+  AttachmentBuilder,
 } from 'discord.js';
+import { ethers } from 'ethers';
+import QRCode from 'qrcode';
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -25,7 +28,18 @@ const TTT_WIN_LINES = [
 const RPS_EMOJI = { rock: '🪨', paper: '📄', scissors: '✂️' };
 const RPS_BEATS = { rock: 'scissors', paper: 'rock', scissors: 'paper' };
 
-// Map each action command to its some-random-api endpoint and display config
+// ── BEP20 / Payment Constants ─────────────────────────────────
+
+const USDT_BSC_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
+const USDT_DECIMALS    = 18;
+const PAYMENT_TIMEOUT  = 15 * 60 * 1000; // 15 minutes
+const POLL_INTERVAL    = 15 * 1000;       // poll every 15 seconds
+
+const ERC20_ABI = [
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+];
+
+// ── Map each action command to its some-random-api endpoint and display config
 const ACTION_CONFIG = {
   hug:   { endpoint: 'hug',   color: 0xFF69B4, emoji: '🤗', verb: 'wraps',         suffix: 'in a warm hug!',             footer: 'Spreading the love ❤️'  },
   pat:   { endpoint: 'pat',   color: 0x7ED56F, emoji: '👋', verb: 'gives',          suffix: 'a gentle pat on the head!',  footer: 'So sweet! 🌸'           },
@@ -560,6 +574,151 @@ async function handleTictactoe(interaction) {
   });
 }
 
+// ── Command: /bep20 ───────────────────────────────────────────
+
+async function handleBep20(interaction) {
+  await interaction.deferReply();
+
+  const amount  = interaction.options.getNumber('amount');
+  const wallet  = process.env.RECEIVER_WALLET_ADDRESS;
+  const rpcUrl  = process.env.BSC_RPC_URL;
+
+  if (!wallet || !rpcUrl) {
+    await interaction.editReply('❌ Payment system is not configured. Contact the server admin.');
+    return;
+  }
+
+  // ── Generate QR code ─────────────────────────────────────
+  let qrBuffer;
+  try {
+    qrBuffer = await QRCode.toBuffer(wallet, {
+      type: 'png',
+      width: 300,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+    });
+  } catch (err) {
+    console.error('QR generation error:', err);
+    await interaction.editReply('❌ Failed to generate QR code. Please try again.');
+    return;
+  }
+
+  const attachment = new AttachmentBuilder(qrBuffer, { name: 'payment-qr.png' });
+
+  const pendingEmbed = new EmbedBuilder()
+    .setColor(0x26A17B)
+    .setTitle('💵 USDT Payment Request')
+    .setDescription(
+      `Send exactly **${amount} USDT** (BEP20) on **BNB Smart Chain** to the address below.\n\n` +
+      `> ⚠️ Only send **BEP20 USDT** — sending on the wrong network will result in lost funds.`
+    )
+    .addFields(
+      { name: '📬 Wallet Address', value: `\`${wallet}\``,           inline: false },
+      { name: '💰 Amount',         value: `**${amount} USDT**`,      inline: true  },
+      { name: '🔗 Network',        value: '**BSC (BEP20)**',         inline: true  },
+      { name: '⏳ Status',          value: '`Awaiting payment...`',   inline: false },
+    )
+    .setImage('attachment://payment-qr.png')
+    .setTimestamp()
+    .setFooter({ text: `Monitoring expires in 15 min • Requested by ${interaction.user.username}` });
+
+  await interaction.editReply({ embeds: [pendingEmbed], files: [attachment] });
+
+  // ── Connect to BSC ────────────────────────────────────────
+  let provider;
+  try {
+    provider = new ethers.JsonRpcProvider(rpcUrl);
+    await provider.getBlockNumber();
+  } catch (err) {
+    console.error('BSC RPC connection error:', err);
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Network Error')
+          .setDescription('Could not connect to the BSC network. Please try again later.')
+          .addFields({ name: '📬 Address', value: `\`${wallet}\``, inline: false }),
+      ],
+      files: [],
+    });
+    return;
+  }
+
+  const usdtContract = new ethers.Contract(USDT_BSC_ADDRESS, ERC20_ABI, provider);
+  const amountWei    = ethers.parseUnits(Number(amount).toFixed(6), USDT_DECIMALS);
+  const startBlock   = await provider.getBlockNumber();
+  const startTime    = Date.now();
+
+  // ── Poll for incoming USDT Transfer ───────────────────────
+  const pollTimer = setInterval(async () => {
+
+    // Timeout — expire the request after 15 minutes
+    if (Date.now() - startTime > PAYMENT_TIMEOUT) {
+      clearInterval(pollTimer);
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x99AAB5)
+            .setTitle('⏱️ Payment Request Expired')
+            .setDescription(`No payment of **${amount} USDT** was detected within 15 minutes.`)
+            .addFields(
+              { name: '📬 Address', value: `\`${wallet}\``,     inline: false },
+              { name: '💰 Amount',  value: `**${amount} USDT**`, inline: true  },
+            )
+            .setFooter({ text: 'Run /bep20 again to create a new request.' }),
+        ],
+        files: [],
+      }).catch(() => {});
+      return;
+    }
+
+    // Check for matching Transfer events since start block
+    try {
+      const currentBlock = await provider.getBlockNumber();
+      if (currentBlock <= startBlock) return;
+
+      const filter = usdtContract.filters.Transfer(null, wallet);
+      const events  = await usdtContract.queryFilter(filter, startBlock, currentBlock);
+
+      for (const event of events) {
+        if (event.args.value >= amountWei) {
+          clearInterval(pollTimer);
+
+          const txHash  = event.transactionHash;
+          const from    = event.args.from;
+          const bscScan = `https://bscscan.com/tx/${txHash}`;
+
+          const gif = await fetchAnimuGif('wink').catch(() => null);
+          const successEmbed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('✅ Payment Confirmed!')
+            .setDescription(
+              `**${amount} USDT** has been received on BSC!\n\n` +
+              `[🔎 View on BscScan](${bscScan})`
+            )
+            .addFields(
+              { name: '📬 To',      value: `\`${wallet}\``,      inline: false },
+              { name: '📤 From',    value: `\`${from}\``,         inline: false },
+              { name: '💰 Amount',  value: `**${amount} USDT**`,  inline: true  },
+              { name: '🔗 Network', value: '**BSC (BEP20)**',     inline: true  },
+              { name: '🔎 Tx Hash', value: `\`${txHash}\``,       inline: false },
+            )
+            .setTimestamp()
+            .setFooter({ text: `Confirmed • Requested by ${interaction.user.username}` });
+
+          if (gif) successEmbed.setImage(gif);
+
+          await interaction.editReply({ embeds: [successEmbed], files: [] }).catch(() => {});
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('BSC polling error:', err);
+    }
+
+  }, POLL_INTERVAL);
+}
+
 // ── Interaction Router ────────────────────────────────────────
 
 client.on('interactionCreate', async (interaction) => {
@@ -567,6 +726,7 @@ client.on('interactionCreate', async (interaction) => {
 
   try {
     switch (interaction.commandName) {
+      case 'bep20':     return await handleBep20(interaction);
       case 'math':      return await handleMath(interaction);
       case 'currency':  return await handleCurrency(interaction);
       case 'hug':
