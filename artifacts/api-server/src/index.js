@@ -50,28 +50,33 @@ const ERC20_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
-// ── Map each action command to its API URL, response field, and display config
+// ── Map each action command to its nekos.best endpoint and display config
+// nekos.best returns: { results: [{ url, anime_name }] }
 const ACTION_CONFIG = {
-  hug:   { apiUrl: 'https://api.waifu.pics/sfw/hug',   gifField: 'url',  color: 0xFF69B4, emoji: '🤗', verb: 'wraps',              suffix: 'in a warm hug!',            footer: 'Spreading the love ❤️'      },
-  pat:   { apiUrl: 'https://api.waifu.pics/sfw/pat',   gifField: 'url',  color: 0x7ED56F, emoji: '👋', verb: 'gives',              suffix: 'a gentle pat on the head!', footer: 'So sweet! 🌸'               },
-  slap:  { apiUrl: 'https://api.waifu.pics/sfw/slap',  gifField: 'url',  color: 0xFF4500, emoji: '👋', verb: 'slaps',              suffix: 'right across the face!',    footer: 'They had it coming 💀'      },
-  kick:  { apiUrl: 'https://some-random-api.com/animu/punch', gifField: 'link', color: 0xC0392B, emoji: '🦵', verb: 'kicks',       suffix: 'into next week!',           footer: 'Boots of justice 👟'        },
-  kiss:  { apiUrl: 'https://api.waifu.pics/sfw/kiss',  gifField: 'url',  color: 0xFF1493, emoji: '💋', verb: 'plants a kiss on',   suffix: '\'s cheek! 😘',             footer: 'Caught in 4K 💕'            },
-  wink:  { apiUrl: 'https://api.waifu.pics/sfw/wink',  gifField: 'url',  color: 0x9B59B6, emoji: '😉', verb: 'gives',              suffix: 'a cheeky wink!',            footer: 'Say less 😏'                },
-  glare: { apiUrl: 'https://some-random-api.com/animu/stare', gifField: 'link', color: 0x2C3E50, emoji: '😒', verb: 'glares intensely at', suffix: '.',              footer: 'Tension level: maximum 🧊'  },
+  hug:   { apiUrl: 'https://nekos.best/api/v2/hug?amount=1',   color: 0xFF69B4, emoji: '🤗', verb: 'wraps',              suffix: 'in a warm hug!',            footer: 'Spreading the love ❤️'      },
+  pat:   { apiUrl: 'https://nekos.best/api/v2/pat?amount=1',   color: 0x7ED56F, emoji: '👋', verb: 'gives',              suffix: 'a gentle pat on the head!', footer: 'So sweet! 🌸'               },
+  slap:  { apiUrl: 'https://nekos.best/api/v2/slap?amount=1',  color: 0xFF4500, emoji: '👋', verb: 'slaps',              suffix: 'right across the face!',    footer: 'They had it coming 💀'      },
+  kick:  { apiUrl: 'https://nekos.best/api/v2/kick?amount=1',  color: 0xC0392B, emoji: '🦵', verb: 'kicks',              suffix: 'into next week!',           footer: 'Boots of justice 👟'        },
+  kiss:  { apiUrl: 'https://nekos.best/api/v2/kiss?amount=1',  color: 0xFF1493, emoji: '💋', verb: 'plants a kiss on',   suffix: '\'s cheek! 😘',             footer: 'Caught in 4K 💕'            },
+  wink:  { apiUrl: 'https://nekos.best/api/v2/wink?amount=1',  color: 0x9B59B6, emoji: '😉', verb: 'gives',              suffix: 'a cheeky wink!',            footer: 'Say less 😏'                },
+  glare: { apiUrl: 'https://nekos.best/api/v2/stare?amount=1', color: 0x2C3E50, emoji: '😒', verb: 'glares intensely at', suffix: '.',                        footer: 'Tension level: maximum 🧊'  },
 };
 
 // ── Helpers ───────────────────────────────────────────────────
 
-async function fetchAnimuGif(apiUrl, gifField) {
-  const response = await axios.get(apiUrl, { timeout: 8000 });
-  const gifUrl = response.data[gifField];
+async function fetchAnimuGif(apiUrl) {
+  const response = await axios.get(apiUrl, {
+    timeout: 8000,
+    headers: { 'User-Agent': 'DiscordBot/1.0 Node.js' },
+  });
+  // nekos.best format: { results: [{ url, anime_name }] }
+  const gifUrl = response.data?.results?.[0]?.url;
   if (!gifUrl) throw new Error('No gif URL in API response');
   return gifUrl;
 }
 
 async function buildVictoryEmbed(winner, title, description) {
-  const gif   = await fetchAnimuGif('https://api.waifu.pics/sfw/wink', 'url').catch(() => null);
+  const gif   = await fetchAnimuGif('https://nekos.best/api/v2/wink?amount=1').catch(() => null);
   const embed = new EmbedBuilder()
     .setColor(0xFFD700)
     .setTitle(title)
@@ -255,7 +260,7 @@ async function handleAction(interaction) {
 
   let gif;
   try {
-    gif = await fetchAnimuGif(cfg.apiUrl, cfg.gifField);
+    gif = await fetchAnimuGif(cfg.apiUrl);
   } catch (error) {
     console.error('API Fetch Error:', error);
     await interaction.editReply('API is currently down, please try again later.');
@@ -782,7 +787,7 @@ async function handleBep20(interaction) {
           const from    = event.args.from;
           const bscScan = `https://bscscan.com/tx/${txHash}`;
 
-          const gif = await fetchAnimuGif('wink').catch(() => null);
+          const gif = await fetchAnimuGif('https://nekos.best/api/v2/wink?amount=1').catch(() => null);
           const successEmbed = new EmbedBuilder()
             .setColor(0x57F287)
             .setTitle('✅ Payment Confirmed!')
