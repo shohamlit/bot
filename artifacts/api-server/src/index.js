@@ -39,9 +39,19 @@ const ACTION_CONFIG = {
 // ── Helpers ───────────────────────────────────────────────────
 
 async function fetchAnimuGif(endpoint) {
-  const res  = await fetch(`https://some-random-api.com/animu/${endpoint}`);
-  const data = await res.json();
-  return data.link;
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 8000); // 8s timeout
+  try {
+    const res = await fetch(`https://some-random-api.com/animu/${endpoint}`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
+    const data = await res.json();
+    if (!data.link) throw new Error('No link in API response');
+    return data.link;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function buildVictoryEmbed(winner, title, description) {
@@ -155,17 +165,16 @@ async function handleCurrency(interaction) {
 
   let data;
   try {
-    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`API returned ${res.status}`);
     data = await res.json();
   } catch {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xED4245)
-          .setTitle('❌ Network Error')
-          .setDescription('Could not reach the exchange rate API. Please try again.'),
-      ],
-    });
+    await interaction.editReply('API is currently down, please try again later.');
     return;
   }
 
@@ -232,7 +241,7 @@ async function handleAction(interaction) {
   try {
     gif = await fetchAnimuGif(cfg.endpoint);
   } catch {
-    await interaction.editReply({ content: '❌ Could not fetch a GIF right now. Try again!' });
+    await interaction.editReply('API is currently down, please try again later.');
     return;
   }
 
