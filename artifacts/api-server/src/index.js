@@ -584,6 +584,97 @@ async function handleTictactoe(interaction) {
   });
 }
 
+// ── Command: /bep20history ────────────────────────────────────
+
+async function handleBep20History(interaction) {
+  await interaction.deferReply();
+
+  const wallet = process.env.RECEIVER_WALLET_ADDRESS;
+  const rpcUrl = process.env.BSC_RPC_URL;
+  const limit  = interaction.options.getInteger('limit') ?? 5;
+
+  if (!wallet || !rpcUrl) {
+    await interaction.editReply('❌ Payment system is not configured. Contact the server admin.');
+    return;
+  }
+
+  // ── Connect to BSC ────────────────────────────────────────
+  let provider;
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 8000);
+    provider = new ethers.JsonRpcProvider(rpcUrl);
+    await provider.getBlockNumber();
+    clearTimeout(t);
+  } catch {
+    await interaction.editReply('API is currently down, please try again later.');
+    return;
+  }
+
+  // ── Query Transfer events ─────────────────────────────────
+  try {
+    const currentBlock = await provider.getBlockNumber();
+    const LOOKBACK     = 5000; // ~4 hours on BSC at ~3 s/block
+    const fromBlock    = Math.max(0, currentBlock - LOOKBACK);
+
+    const usdtContract = new ethers.Contract(USDT_BSC_ADDRESS, ERC20_ABI, provider);
+    const filter       = usdtContract.filters.Transfer(null, wallet);
+    const events       = await usdtContract.queryFilter(filter, fromBlock, currentBlock);
+
+    const shortWallet = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+    const hoursBack   = Math.round((LOOKBACK * 3) / 3600);
+
+    if (events.length === 0) {
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x99AAB5)
+            .setTitle('📋 Payment History')
+            .setDescription(
+              `No USDT received in the last ~${hoursBack} hours.\n\n` +
+              `> Wallet: \`${wallet}\``
+            )
+            .setFooter({ text: 'BNB Smart Chain (BEP20)' }),
+        ],
+      });
+      return;
+    }
+
+    // Most recent `limit` events, newest first
+    const recent = [...events].reverse().slice(0, limit);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x26A17B)
+      .setTitle('📋 Recent USDT Payments Received')
+      .setDescription(
+        `**${recent.length}** of **${events.length}** transaction(s) found in the last ~${hoursBack} hours.\n` +
+        `Wallet: \`${shortWallet}\``
+      )
+      .setFooter({ text: 'BNB Smart Chain (BEP20) • Amounts in USDT' })
+      .setTimestamp();
+
+    for (const event of recent) {
+      const amount    = parseFloat(ethers.formatUnits(event.args.value, USDT_DECIMALS));
+      const txHash    = event.transactionHash;
+      const from      = event.args.from;
+      const shortFrom = `${from.slice(0, 6)}…${from.slice(-4)}`;
+      const shortTx   = `${txHash.slice(0, 8)}…${txHash.slice(-6)}`;
+
+      embed.addFields({
+        name:   `💰 ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDT`,
+        value:  `From: \`${shortFrom}\`\n[${shortTx}](https://bscscan.com/tx/${txHash})`,
+        inline: true,
+      });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+
+  } catch (err) {
+    console.error('bep20history error:', err);
+    await interaction.editReply('API is currently down, please try again later.');
+  }
+}
+
 // ── Command: /bep20 ───────────────────────────────────────────
 
 async function handleBep20(interaction) {
@@ -737,7 +828,8 @@ client.on('interactionCreate', async (interaction) => {
 
   try {
     switch (interaction.commandName) {
-      case 'bep20':     return await handleBep20(interaction);
+      case 'bep20':        return await handleBep20(interaction);
+      case 'bep20history': return await handleBep20History(interaction);
       case 'math':      return await handleMath(interaction);
       case 'currency':  return await handleCurrency(interaction);
       case 'hug':

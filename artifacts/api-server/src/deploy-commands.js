@@ -39,6 +39,20 @@ const commands = [
     .setIntegrationTypes(IT)
     .setContexts(CT),
 
+  // ── /bep20history ─────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('bep20history')
+    .setDescription('Show recent USDT payments received by the wallet.')
+    .addIntegerOption((o) =>
+      o.setName('limit')
+        .setDescription('Number of transactions to show (1–10, default 5)')
+        .setRequired(false)
+        .setMinValue(1)
+        .setMaxValue(10)
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
   // ── /math ─────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('math')
