@@ -732,6 +732,7 @@ async function handleBep20(interaction) {
 // ── Interaction Router ────────────────────────────────────────
 
 client.on('interactionCreate', async (interaction) => {
+  console.log(`[interaction] type=${interaction.type} isChatInput=${interaction.isChatInputCommand()} name=${interaction.commandName ?? 'n/a'}`);
   if (!interaction.isChatInputCommand()) return;
 
   try {
