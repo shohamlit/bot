@@ -299,7 +299,19 @@ async function handleAction(interaction) {
     .setTimestamp()
     .setFooter({ text: cfg.footer });
 
-  await interaction.editReply({ embeds: [embed] });
+  // ── Return-action button for kiss / pat / hug ─────────────
+  const RETURN_LABELS = { kiss: 'Kiss Back 💋', pat: 'Pat Back 🌸', hug: 'Hug Back 💖' };
+  if (RETURN_LABELS[cmd]) {
+    const returnRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`return_${cmd}:${sender.id}:${target.id}`)
+        .setLabel(RETURN_LABELS[cmd])
+        .setStyle(ButtonStyle.Primary)
+    );
+    await interaction.editReply({ embeds: [embed], components: [returnRow] });
+  } else {
+    await interaction.editReply({ embeds: [embed] });
+  }
 }
 
 // ── Command: /rps ─────────────────────────────────────────────
@@ -524,7 +536,14 @@ async function handleBep20(interaction) {
     .setTimestamp()
     .setFooter({ text: `Monitoring expires in 15 min • Requested by ${interaction.user.username}` });
 
-  await interaction.editReply({ embeds: [pendingEmbed], files: [attachment] });
+  const copyRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('copy_wallet')
+      .setLabel('Copy Wallet Address 📋')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await interaction.editReply({ embeds: [pendingEmbed], files: [attachment], components: [copyRow] });
 
   // ── Connect to BSC ────────────────────────────────────────
   let provider;
@@ -877,6 +896,71 @@ async function handleTictactoe(interaction) {
 
 client.on('interactionCreate', async (interaction) => {
   console.log(`[interaction] type=${interaction.type} isChatInput=${interaction.isChatInputCommand()} name=${interaction.commandName ?? 'n/a'}`);
+
+  // ── Button handler ─────────────────────────────────────────
+  if (interaction.isButton()) {
+    try {
+      const customId = interaction.customId;
+
+      // ── Copy Wallet ────────────────────────────────────────
+      if (customId === 'copy_wallet') {
+        const wallet = process.env.RECEIVER_WALLET_ADDRESS ?? 'Not configured';
+        await interaction.reply({ content: wallet, ephemeral: true });
+        return;
+      }
+
+      // ── Return Actions (return_kiss / return_pat / return_hug)
+      if (customId.startsWith('return_')) {
+        const [action, originalSenderId, originalTargetId] = customId.split(':');
+        const cmd = action.replace('return_', '');
+
+        if (interaction.user.id !== originalTargetId) {
+          await interaction.reply({ content: "This button isn't for you!", ephemeral: true });
+          return;
+        }
+
+        const cfg    = ACTION_CONFIG[cmd];
+        const sender = interaction.user;
+        const target = await interaction.client.users.fetch(originalSenderId).catch(() => null);
+
+        if (!target) {
+          await interaction.reply({ content: '❌ Could not find the original user.', ephemeral: true });
+          return;
+        }
+
+        await interaction.deferReply();
+
+        let gif;
+        try {
+          gif = await fetchAnimuGif(cfg.apiUrl);
+        } catch (err) {
+          console.error('Return action API error:', err);
+          await interaction.editReply({ content: 'API is currently down, please try again later.' });
+          return;
+        }
+
+        const returnEmbed = new EmbedBuilder()
+          .setColor(cfg.color)
+          .setTitle(`${cfg.emoji} ${cmd.charAt(0).toUpperCase() + cmd.slice(1)} Back!`)
+          .setDescription(`**${sender}** ${cfg.verb} **${target}** back — ${cfg.suffix}`)
+          .setImage(gif)
+          .setTimestamp()
+          .setFooter({ text: cfg.footer });
+
+        await interaction.editReply({ embeds: [returnEmbed] });
+        return;
+      }
+
+      // All other buttons (rps/ttt) are handled by their own collectors — ignore here
+    } catch (err) {
+      console.error('Button handler error:', err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: '❌ Something went wrong.', ephemeral: true }).catch(() => {});
+      }
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   try {
