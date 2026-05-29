@@ -176,6 +176,70 @@ const commands = [
     .setIntegrationTypes(IT)
     .setContexts(CT),
 
+  // ── /poll ─────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('poll')
+    .setDescription('Create a live voting poll with up to 4 options.')
+    .addStringOption((o) => o.setName('question').setDescription('The poll question').setRequired(true))
+    .addStringOption((o) => o.setName('option1').setDescription('First option').setRequired(true))
+    .addStringOption((o) => o.setName('option2').setDescription('Second option').setRequired(true))
+    .addStringOption((o) => o.setName('option3').setDescription('Third option (optional)').setRequired(false))
+    .addStringOption((o) => o.setName('option4').setDescription('Fourth option (optional)').setRequired(false))
+    .addIntegerOption((o) => o.setName('duration').setDescription('Duration in minutes (1–60, default 5)').setRequired(false).setMinValue(1).setMaxValue(60))
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /remind ───────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('remind')
+    .setDescription('Set a personal reminder — the bot will DM you after the delay.')
+    .addStringOption((o) => o.setName('time').setDescription('When to remind you (e.g. 10m, 2h, 1h30m, 90s)').setRequired(true))
+    .addStringOption((o) => o.setName('message').setDescription('What to remind you about').setRequired(true))
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /trivia ───────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('trivia')
+    .setDescription('Answer a random multiple-choice trivia question — 20 seconds on the clock!')
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /8ball ────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('8ball')
+    .setDescription('Ask the Magic 8-Ball a yes/no question.')
+    .addStringOption((o) => o.setName('question').setDescription('Your question for the 8-ball').setRequired(true))
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /joke ─────────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('joke')
+    .setDescription('Get a random safe-mode joke.')
+    .addStringOption((o) =>
+      o.setName('category')
+        .setDescription('Joke category (default: Any)')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Any',         value: 'Any'         },
+          { name: 'Programming', value: 'Programming' },
+          { name: 'Pun',         value: 'Pun'         },
+          { name: 'Spooky',      value: 'Spooky'      },
+          { name: 'Christmas',   value: 'Christmas'   },
+        )
+    )
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
+  // ── /avatar ───────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('avatar')
+    .setDescription("Show a user's avatar in full size.")
+    .addUserOption((o) => o.setName('user').setDescription('Whose avatar to show (default: yourself)').setRequired(false))
+    .setIntegrationTypes(IT)
+    .setContexts(CT),
+
 ].map((cmd) => cmd.toJSON());
 
 // ── Register with Discord REST API ───────────────────────────

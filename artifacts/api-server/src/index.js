@@ -892,6 +892,349 @@ async function handleTictactoe(interaction) {
   });
 }
 
+// ── Poll & Trivia State ───────────────────────────────────────
+const activePolls  = new Map(); // msgId → { votes, opts, pollEmbed, pollRow }
+const activeTrivia = new Map(); // msgId → { correctIndex, correctAnswer, allAnswers, question, userId }
+
+// ── Command: /poll ────────────────────────────────────────────
+
+async function handlePoll(interaction) {
+  await interaction.deferReply();
+
+  const question   = interaction.options.getString('question');
+  const opts       = [
+    interaction.options.getString('option1'),
+    interaction.options.getString('option2'),
+    interaction.options.getString('option3'),
+    interaction.options.getString('option4'),
+  ].filter(Boolean);
+  const durationMs = (interaction.options.getInteger('duration') ?? 5) * 60_000;
+
+  const votes = new Map(); // userId → optionIndex
+
+  const pollEmbed = (final = false) => {
+    const total  = votes.size;
+    const counts = opts.map((_, i) => [...votes.values()].filter((v) => v === i).length);
+    return new EmbedBuilder()
+      .setColor(final ? 0x99AAB5 : 0x5865F2)
+      .setTitle(`📊 ${final ? 'Poll Ended — ' : ''}${question}`)
+      .setDescription(
+        opts.map((opt, i) => {
+          const n   = counts[i];
+          const pct = total ? Math.round((n / total) * 100) : 0;
+          const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10));
+          return `**${i + 1}.** ${opt}\n\`${bar}\` ${pct}% · ${n} vote${n !== 1 ? 's' : ''}`;
+        }).join('\n\n')
+      )
+      .addFields({ name: 'Total Votes', value: `${total}`, inline: true })
+      .setFooter({ text: final ? 'Poll closed' : `Closes in ${Math.round(durationMs / 60_000)} min • You may change your vote` })
+      .setTimestamp();
+  };
+
+  const pollRow = (disabled = false) =>
+    new ActionRowBuilder().addComponents(
+      opts.map((opt, i) =>
+        new ButtonBuilder()
+          .setCustomId(`poll_${i}`)
+          .setLabel(`${i + 1}. ${opt.slice(0, 25)}`)
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(disabled)
+      )
+    );
+
+  const msg = await interaction.editReply({ embeds: [pollEmbed()], components: [pollRow()] });
+  activePolls.set(msg.id, { votes, opts, pollEmbed, pollRow });
+
+  setTimeout(async () => {
+    activePolls.delete(msg.id);
+    await msg.edit({ embeds: [pollEmbed(true)], components: [pollRow(true)] }).catch(() => {});
+  }, durationMs);
+}
+
+// ── Command: /remind ──────────────────────────────────────────
+
+function parseTimeString(str) {
+  let ms = 0;
+  const h = str.match(/(\d+)\s*h/i);
+  const m = str.match(/(\d+)\s*m(?!s)/i);
+  const s = str.match(/(\d+)\s*s/i);
+  if (h) ms += parseInt(h[1], 10) * 3_600_000;
+  if (m) ms += parseInt(m[1], 10) * 60_000;
+  if (s) ms += parseInt(s[1], 10) * 1_000;
+  return ms;
+}
+
+async function handleRemind(interaction) {
+  const timeStr = interaction.options.getString('time');
+  const message = interaction.options.getString('message');
+  const ms      = parseTimeString(timeStr);
+
+  if (!ms || ms <= 0) {
+    await interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Invalid Time Format')
+          .setDescription('Could not understand that time. Try formats like `10m`, `2h`, `1h30m`, `90s`.')
+          .setFooter({ text: 'Examples: 30s  •  5m  •  1h  •  2h30m' }),
+      ],
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (ms > 86_400_000) {
+    await interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Too Far Ahead')
+          .setDescription('Reminders are limited to **24 hours** maximum.')
+          .setFooter({ text: 'Use a shorter time.' }),
+      ],
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const fireAt  = Math.floor((Date.now() + ms) / 1000);
+  const user    = interaction.user;
+  const chanId  = interaction.channelId;
+
+  await interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('⏰ Reminder Set!')
+        .setDescription(`I'll remind you at <t:${fireAt}:F> (<t:${fireAt}:R>).\n\n> ${message}`)
+        .setFooter({ text: `Reminder in: ${timeStr}` }),
+    ],
+    ephemeral: true,
+  });
+
+  setTimeout(async () => {
+    const reminderEmbed = new EmbedBuilder()
+      .setColor(0xFEE75C)
+      .setTitle('⏰ Reminder!')
+      .setDescription(`You asked me to remind you:\n\n> ${message}`)
+      .setFooter({ text: `Set ${timeStr} ago` })
+      .setTimestamp();
+
+    try {
+      await user.send({ embeds: [reminderEmbed] });
+    } catch {
+      try {
+        const channel = await client.channels.fetch(chanId);
+        await channel.send({ content: `<@${user.id}> ⏰ **Reminder!**`, embeds: [reminderEmbed] });
+      } catch { /* channel unavailable — nothing to do */ }
+    }
+  }, ms);
+}
+
+// ── Command: /trivia ──────────────────────────────────────────
+
+function decodeHtml(str) {
+  return str
+    .replace(/&amp;/g,   '&')
+    .replace(/&lt;/g,    '<')
+    .replace(/&gt;/g,    '>')
+    .replace(/&quot;/g,  '"')
+    .replace(/&#039;/g,  "'")
+    .replace(/&ldquo;/g, '\u201C')
+    .replace(/&rdquo;/g, '\u201D')
+    .replace(/&lsquo;/g, '\u2018')
+    .replace(/&rsquo;/g, '\u2019');
+}
+
+async function handleTrivia(interaction) {
+  await interaction.deferReply();
+
+  let data;
+  try {
+    const res = await axios.get(
+      'https://opentdb.com/api.php?amount=1&type=multiple',
+      { timeout: 8000, headers: { 'User-Agent': 'DiscordBot/1.0 Node.js' } }
+    );
+    data = res.data;
+  } catch {
+    await interaction.editReply('API is currently down, please try again later.');
+    return;
+  }
+
+  if (data.response_code !== 0 || !data.results?.length) {
+    await interaction.editReply('Could not fetch a trivia question right now. Please try again in a moment.');
+    return;
+  }
+
+  const q             = data.results[0];
+  const question      = decodeHtml(q.question);
+  const correctAnswer = decodeHtml(q.correct_answer);
+  const allAnswers    = [...q.incorrect_answers.map(decodeHtml), correctAnswer].sort(() => Math.random() - 0.5);
+  const correctIndex  = allAnswers.indexOf(correctAnswer);
+
+  const DIFF_COLORS = { easy: 0x57F287, medium: 0xFEE75C, hard: 0xED4245 };
+
+  const triviaEmbed = new EmbedBuilder()
+    .setColor(DIFF_COLORS[q.difficulty] ?? 0x5865F2)
+    .setTitle('🧠 Trivia Time!')
+    .setDescription(`**${question}**`)
+    .addFields(
+      { name: '📂 Category',   value: decodeHtml(q.category),                                           inline: true },
+      { name: '🎯 Difficulty', value: q.difficulty.charAt(0).toUpperCase() + q.difficulty.slice(1),    inline: true },
+    )
+    .setFooter({ text: '⏱️ You have 20 seconds to answer!' })
+    .setTimestamp();
+
+  const answerRow = new ActionRowBuilder().addComponents(
+    allAnswers.map((ans, i) =>
+      new ButtonBuilder()
+        .setCustomId(`trivia_${i}`)
+        .setLabel(`${String.fromCharCode(65 + i)}. ${ans.slice(0, 50)}`)
+        .setStyle(ButtonStyle.Secondary)
+    )
+  );
+
+  const msg = await interaction.editReply({ embeds: [triviaEmbed], components: [answerRow] });
+  activeTrivia.set(msg.id, { correctIndex, correctAnswer, allAnswers, question, userId: interaction.user.id });
+
+  setTimeout(async () => {
+    if (activeTrivia.delete(msg.id)) {
+      await msg.edit({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x99AAB5)
+            .setTitle("⏱️ Time's Up!")
+            .setDescription(`The correct answer was **${correctAnswer}**.\n\n**Q:** ${question}`)
+            .setFooter({ text: 'Run /trivia to try again.' }),
+        ],
+        components: [
+          new ActionRowBuilder().addComponents(
+            allAnswers.map((ans, i) =>
+              new ButtonBuilder()
+                .setCustomId(`trivia_${i}`)
+                .setLabel(`${String.fromCharCode(65 + i)}. ${ans.slice(0, 50)}`)
+                .setStyle(i === correctIndex ? ButtonStyle.Success : ButtonStyle.Secondary)
+                .setDisabled(true)
+            )
+          ),
+        ],
+      }).catch(() => {});
+    }
+  }, 20_000);
+}
+
+// ── Command: /8ball ───────────────────────────────────────────
+
+const EIGHT_BALL = [
+  { text: 'It is certain.',              color: 0x57F287 },
+  { text: 'It is decidedly so.',         color: 0x57F287 },
+  { text: 'Without a doubt.',            color: 0x57F287 },
+  { text: 'Yes, definitely.',            color: 0x57F287 },
+  { text: 'You may rely on it.',         color: 0x57F287 },
+  { text: 'As I see it, yes.',           color: 0x57F287 },
+  { text: 'Most likely.',                color: 0x57F287 },
+  { text: 'Outlook good.',               color: 0x57F287 },
+  { text: 'Yes.',                        color: 0x57F287 },
+  { text: 'Signs point to yes.',         color: 0x57F287 },
+  { text: 'Reply hazy, try again.',      color: 0xFEE75C },
+  { text: 'Ask again later.',            color: 0xFEE75C },
+  { text: 'Better not tell you now.',    color: 0xFEE75C },
+  { text: 'Cannot predict now.',         color: 0xFEE75C },
+  { text: 'Concentrate and ask again.',  color: 0xFEE75C },
+  { text: "Don't count on it.",          color: 0xED4245 },
+  { text: 'My reply is no.',             color: 0xED4245 },
+  { text: 'My sources say no.',          color: 0xED4245 },
+  { text: 'Outlook not so good.',        color: 0xED4245 },
+  { text: 'Very doubtful.',              color: 0xED4245 },
+];
+
+async function handleEightBall(interaction) {
+  const question = interaction.options.getString('question');
+  const pick     = EIGHT_BALL[Math.floor(Math.random() * EIGHT_BALL.length)];
+
+  await interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(pick.color)
+        .setTitle('🎱 Magic 8-Ball')
+        .addFields(
+          { name: '❓ Question', value: question,         inline: false },
+          { name: '🎱 Answer',   value: `*${pick.text}*`, inline: false },
+        )
+        .setFooter({ text: `Asked by ${interaction.user.username}` })
+        .setTimestamp(),
+    ],
+  });
+}
+
+// ── Command: /joke ────────────────────────────────────────────
+
+async function handleJoke(interaction) {
+  await interaction.deferReply();
+
+  const category = interaction.options.getString('category') ?? 'Any';
+
+  let data;
+  try {
+    const res = await axios.get(
+      `https://v2.jokeapi.dev/joke/${category}?safe-mode`,
+      { timeout: 8000, headers: { 'User-Agent': 'DiscordBot/1.0 Node.js' } }
+    );
+    data = res.data;
+  } catch {
+    await interaction.editReply('API is currently down, please try again later.');
+    return;
+  }
+
+  if (data.error) {
+    await interaction.editReply('Could not fetch a joke right now. Please try again.');
+    return;
+  }
+
+  const jokeText = data.type === 'single'
+    ? data.joke
+    : `${data.setup}\n\n||${data.delivery}||`;
+
+  await interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setTitle('😂 Random Joke')
+        .setDescription(jokeText)
+        .addFields({ name: '📂 Category', value: data.category, inline: true })
+        .setFooter({ text: data.type === 'twopart' ? 'Click the spoiler to reveal the punchline!' : 'Powered by JokeAPI v2' })
+        .setTimestamp(),
+    ],
+  });
+}
+
+// ── Command: /avatar ──────────────────────────────────────────
+
+async function handleAvatar(interaction) {
+  const target    = interaction.options.getUser('user') ?? interaction.user;
+  const avatarUrl = target.displayAvatarURL({ size: 1024 });
+  const pngUrl    = target.displayAvatarURL({ size: 1024, extension: 'png' });
+  const webpUrl   = target.displayAvatarURL({ size: 1024, extension: 'webp' });
+  const createdAt = Math.floor(target.createdTimestamp / 1000);
+
+  await interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle(`🖼️ ${target.username}'s Avatar`)
+        .setDescription(`[PNG](${pngUrl}) · [WebP](${webpUrl})`)
+        .setImage(avatarUrl)
+        .addFields(
+          { name: '🆔 Username',        value: target.username,           inline: true  },
+          { name: '🤖 Bot?',            value: target.bot ? 'Yes' : 'No', inline: true  },
+          { name: '📅 Account Created', value: `<t:${createdAt}:R>`,      inline: false },
+        )
+        .setFooter({ text: `User ID: ${target.id}` })
+        .setTimestamp(),
+    ],
+  });
+}
+
 // ── Interaction Router ────────────────────────────────────────
 
 client.on('interactionCreate', async (interaction) => {
@@ -951,6 +1294,72 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
+      // ── Poll Votes ────────────────────────────────────────
+      if (customId.startsWith('poll_')) {
+        const idx  = parseInt(customId.replace('poll_', ''), 10);
+        const poll = activePolls.get(interaction.message.id);
+        if (!poll) {
+          await interaction.reply({ content: '⏱️ This poll has ended.', ephemeral: true });
+          return;
+        }
+        const already = poll.votes.has(interaction.user.id);
+        poll.votes.set(interaction.user.id, idx);
+        await interaction.reply({
+          content: already
+            ? `🔄 Vote changed to **${poll.opts[idx]}**!`
+            : `✅ Voted for **${poll.opts[idx]}**!`,
+          ephemeral: true,
+        });
+        await interaction.message.edit({
+          embeds:     [poll.pollEmbed()],
+          components: [poll.pollRow()],
+        }).catch(() => {});
+        return;
+      }
+
+      // ── Trivia Answers ────────────────────────────────────
+      if (customId.startsWith('trivia_')) {
+        const idx  = parseInt(customId.replace('trivia_', ''), 10);
+        const game = activeTrivia.get(interaction.message.id);
+        if (!game || isNaN(idx)) return; // expired or disabled button
+        if (interaction.user.id !== game.userId) {
+          await interaction.reply({ content: "This trivia isn't for you! Run `/trivia` to get your own question.", ephemeral: true });
+          return;
+        }
+        activeTrivia.delete(interaction.message.id);
+        const isCorrect = idx === game.correctIndex;
+        await interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(isCorrect ? 0x57F287 : 0xED4245)
+              .setTitle(isCorrect ? '✅ Correct!' : '❌ Wrong!')
+              .setDescription(
+                isCorrect
+                  ? `🎉 Nailed it! **${game.correctAnswer}** is the right answer!`
+                  : `The correct answer was **${game.correctAnswer}**.\n\n**Q:** ${game.question}`
+              )
+              .setFooter({ text: 'Run /trivia to play again.' })
+              .setTimestamp(),
+          ],
+          components: [
+            new ActionRowBuilder().addComponents(
+              game.allAnswers.map((ans, i) =>
+                new ButtonBuilder()
+                  .setCustomId(`trivia_${i}`)
+                  .setLabel(`${String.fromCharCode(65 + i)}. ${ans.slice(0, 50)}`)
+                  .setStyle(
+                    i === game.correctIndex ? ButtonStyle.Success :
+                    i === idx               ? ButtonStyle.Danger  :
+                    ButtonStyle.Secondary
+                  )
+                  .setDisabled(true)
+              )
+            ),
+          ],
+        });
+        return;
+      }
+
       // All other buttons (rps/ttt) are handled by their own collectors — ignore here
     } catch (err) {
       console.error('Button handler error:', err);
@@ -978,6 +1387,12 @@ client.on('interactionCreate', async (interaction) => {
       case 'glare':     return await handleAction(interaction);
       case 'rps':       return await handleRps(interaction);
       case 'tictactoe': return await handleTictactoe(interaction);
+      case 'poll':      return await handlePoll(interaction);
+      case 'remind':    return await handleRemind(interaction);
+      case 'trivia':    return await handleTrivia(interaction);
+      case '8ball':     return await handleEightBall(interaction);
+      case 'joke':      return await handleJoke(interaction);
+      case 'avatar':    return await handleAvatar(interaction);
       default: break;
     }
   } catch (err) {
