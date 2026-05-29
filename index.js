@@ -4,6 +4,14 @@
 // ============================================================
 
 require('dotenv').config();
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 10000;
+
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Health server listening on port ${port}`);
+});
+
 const {
   Client,
   GatewayIntentBits,
