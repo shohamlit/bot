@@ -50,17 +50,17 @@ const ERC20_ABI = [
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
 
-// ── Map each action command to its nekos.best endpoint and display config
-// nekos.best returns: { results: [{ url, anime_name }] }
+// ── Action Command Aesthetics ─────────────────────────────────
 const ACTION_CONFIG = {
-  hug:   { apiUrl: 'https://nekos.best/api/v2/hug?amount=1',   color: 0xFF69B4, emoji: '🤗', verb: 'wraps',              suffix: 'in a warm hug!',            footer: 'Spreading the love ❤️'      },
-  pat:   { apiUrl: 'https://nekos.best/api/v2/pat?amount=1',   color: 0x7ED56F, emoji: '👋', verb: 'gives',              suffix: 'a gentle pat on the head!', footer: 'So sweet! 🌸'               },
-  slap:  { apiUrl: 'https://nekos.best/api/v2/slap?amount=1',  color: 0xFF4500, emoji: '👋', verb: 'slaps',              suffix: 'right across the face!',    footer: 'They had it coming 💀'      },
-  kick:  { apiUrl: 'https://nekos.best/api/v2/kick?amount=1',  color: 0xC0392B, emoji: '🦵', verb: 'kicks',              suffix: 'into next week!',           footer: 'Boots of justice 👟'        },
-  kiss:  { apiUrl: 'https://nekos.best/api/v2/kiss?amount=1',  color: 0xFF1493, emoji: '💋', verb: 'plants a kiss on',   suffix: '\'s cheek! 😘',             footer: 'Caught in 4K 💕'            },
-  wink:  { apiUrl: 'https://nekos.best/api/v2/wink?amount=1',  color: 0x9B59B6, emoji: '😉', verb: 'gives',              suffix: 'a cheeky wink!',            footer: 'Say less 😏'                },
-  glare: { apiUrl: 'https://nekos.best/api/v2/stare?amount=1', color: 0x2C3E50, emoji: '😒', verb: 'glares intensely at', suffix: '.',                        footer: 'Tension level: maximum 🧊'  },
+  hug:   { apiUrl: 'https://nekos.best/api/v2/hug',   color: '#FFAAA5', emoji: '💖', verb: 'wraps', suffix: 'in a cozy hug.', footer: 'Everyone needs a hug sometimes' },
+  pat:   { apiUrl: 'https://nekos.best/api/v2/pat',   color: '#FFD3B6', emoji: '🌸', verb: 'gently pats', suffix: '\'s head.', footer: 'There, there...' },
+  slap:  { apiUrl: 'https://nekos.best/api/v2/slap',  color: '#FF8C94', emoji: '💥', verb: 'just slapped', suffix: 'back to the lobby!', footer: 'OUCH!' },
+  wink:  { apiUrl: 'https://nekos.best/api/v2/wink',  color: '#FCEFC8', emoji: '✨', verb: 'gives', suffix: 'a little wink. 😉', footer: 'Cheeky!' },
+  kiss:  { apiUrl: 'https://nekos.best/api/v2/kiss',  color: '#F686BD', emoji: '💕', verb: 'plants a sweet kiss on', suffix: '!', footer: 'Smooch!' },
+  kick:  { apiUrl: 'https://nekos.best/api/v2/kick',  color: '#D9534F', emoji: '🥋', verb: 'kicks', suffix: 'into the stratosphere!', footer: 'HYAAH!' },
+  glare: { apiUrl: 'https://nekos.best/api/v2/stare', color: '#2C3E50', emoji: '👀', verb: 'is glaring intensely at', suffix: '...', footer: 'Stare...' }
 };
+
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -149,8 +149,9 @@ async function handleMath(interaction) {
         new EmbedBuilder()
           .setColor(0xED4245)
           .setTitle('❌ Invalid Expression')
-          .setDescription(err.message)
-          .setFooter({ text: 'Example: (5^2 + 10) / 2' }),
+          .setDescription(`\`\`\`${err.message}\`\`\``)
+          .addFields({ name: '📥 Your Input', value: `\`${expression}\``, inline: false })
+          .setFooter({ text: 'Tip: Use ^ for exponentiation • Example: (5^2 + 10) / 2' }),
       ],
       ephemeral: true,
     });
@@ -165,12 +166,13 @@ async function handleMath(interaction) {
     embeds: [
       new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('🧮 Math Result')
+        .setTitle('🧮 Calculator')
         .addFields(
-          { name: 'Expression', value: `\`${expression}\``, inline: false },
-          { name: 'Result',     value: `\`\`\`${formatted}\`\`\``,   inline: false },
+          { name: '📥 Expression', value: `\`${expression}\``,        inline: false },
+          { name: '📤 Result',     value: `\`\`\`${formatted}\`\`\``, inline: false },
         )
-        .setFooter({ text: 'Use ^ for exponentiation, % for modulo' }),
+        .setFooter({ text: 'Supports: + − × ÷ % ^ and parentheses' })
+        .setTimestamp(),
     ],
   });
 }
@@ -195,7 +197,15 @@ async function handleCurrency(interaction) {
     if (!res.ok) throw new Error(`API returned ${res.status}`);
     data = await res.json();
   } catch {
-    await interaction.editReply('API is currently down, please try again later.');
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Service Unavailable')
+          .setDescription('The currency API is currently unreachable. Please try again in a moment.')
+          .setFooter({ text: 'Powered by open.er-api.com' }),
+      ],
+    });
     return;
   }
 
@@ -204,8 +214,10 @@ async function handleCurrency(interaction) {
       embeds: [
         new EmbedBuilder()
           .setColor(0xED4245)
-          .setTitle('❌ Unknown Currency')
-          .setDescription(`**${from}** is not a valid currency code.\nUse standard 3-letter codes like \`USD\`, \`EUR\`, \`GBP\`, \`INR\`.`),
+          .setTitle('❌ Unknown Currency Code')
+          .setDescription(`**\`${from}\`** is not a recognised currency code.`)
+          .addFields({ name: '💡 Valid Examples', value: '`USD`  `EUR`  `GBP`  `INR`  `JPY`  `BTC`', inline: false })
+          .setFooter({ text: 'Use standard ISO 4217 three-letter codes' }),
       ],
     });
     return;
@@ -217,8 +229,10 @@ async function handleCurrency(interaction) {
       embeds: [
         new EmbedBuilder()
           .setColor(0xED4245)
-          .setTitle('❌ Unknown Currency')
-          .setDescription(`**${to}** is not a valid currency code.\nUse standard 3-letter codes like \`USD\`, \`EUR\`, \`GBP\`, \`INR\`.`),
+          .setTitle('❌ Unknown Currency Code')
+          .setDescription(`**\`${to}\`** is not a recognised currency code.`)
+          .addFields({ name: '💡 Valid Examples', value: '`USD`  `EUR`  `GBP`  `INR`  `JPY`  `BTC`', inline: false })
+          .setFooter({ text: 'Use standard ISO 4217 three-letter codes' }),
       ],
     });
     return;
@@ -239,12 +253,14 @@ async function handleCurrency(interaction) {
       new EmbedBuilder()
         .setColor(0xFEE75C)
         .setTitle('💱 Currency Conversion')
+        .setDescription(`Converting **${amount.toLocaleString()} ${from}** → **${to}**`)
         .addFields(
-          { name: 'Amount',    value: `**${amount.toLocaleString()} ${from}**`,          inline: true  },
-          { name: 'Converted', value: `**${converted} ${to}**`,                          inline: true  },
-          { name: 'Rate',      value: `\`1 ${from} = ${rateFormatted} ${to}\``,          inline: false },
+          { name: '💵 Result',  value: `**${converted} ${to}**`,                inline: false },
+          { name: '📈 Rate',    value: `\`1 ${from} = ${rateFormatted} ${to}\``, inline: true  },
+          { name: '🕒 Updated', value: updatedAt,                                inline: false },
         )
-        .setFooter({ text: `Rates updated: ${updatedAt}` }),
+        .setFooter({ text: 'Powered by open.er-api.com' })
+        .setTimestamp(),
     ],
   });
 }
@@ -263,7 +279,15 @@ async function handleAction(interaction) {
     gif = await fetchAnimuGif(cfg.apiUrl);
   } catch (error) {
     console.error('API Fetch Error:', error);
-    await interaction.editReply('API is currently down, please try again later.');
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ API Unavailable')
+          .setDescription('The anime GIF service is temporarily down. Please try again in a moment.')
+          .setFooter({ text: 'Powered by nekos.best' }),
+      ],
+    });
     return;
   }
 
@@ -272,6 +296,7 @@ async function handleAction(interaction) {
     .setTitle(`${cfg.emoji} ${cmd.charAt(0).toUpperCase() + cmd.slice(1)}!`)
     .setDescription(`**${sender}** ${cfg.verb} **${target}** ${cfg.suffix}`)
     .setImage(gif)
+    .setTimestamp()
     .setFooter({ text: cfg.footer });
 
   await interaction.editReply({ embeds: [embed] });
@@ -284,15 +309,16 @@ async function handleRps(interaction) {
 
   const lobbyEmbed = new EmbedBuilder()
     .setColor(0x5865F2)
-    .setTitle('⚔️ OPEN CHALLENGE ISSUED ⚔️')
-    .setDescription(`**${host}** is waiting for a challenger!\n\nPress **Accept Challenge** to enter the arena!`)
-    .setFooter({ text: 'First to accept takes the fight.' });
+    .setTitle('⚔️ Open Challenge')
+    .setDescription(`**${host}** has issued a challenge!\n\nPress **Accept** to step into the arena.`)
+    .setFooter({ text: 'First to accept fights. Challenge expires in 2 minutes.' })
+    .setTimestamp();
 
   const acceptRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('rps_accept')
       .setLabel('Accept Challenge')
-      .setEmoji('✔️')
+      .setEmoji('⚔️')
       .setStyle(ButtonStyle.Success)
   );
 
@@ -315,16 +341,18 @@ async function handleRps(interaction) {
 
     const gameEmbed = new EmbedBuilder()
       .setColor(0xED4245)
-      .setTitle('🥊 Rock • Paper • Scissors')
+      .setTitle('🥊 Rock · Paper · Scissors')
       .setDescription(
         `**${host}** vs **${challenger}**\n\n` +
-        `Both players — choose your weapon! Your choice is **secret** until both have moved.`
+        `Both players — choose your weapon below.\n` +
+        `Your choice is **hidden** until both have locked in.`
       )
       .addFields(
-        { name: host.username,       value: '❓ Choosing…', inline: true },
-        { name: challenger.username, value: '❓ Choosing…', inline: true },
+        { name: host.username,       value: '⏳ Thinking…', inline: true },
+        { name: challenger.username, value: '⏳ Thinking…', inline: true },
       )
-      .setFooter({ text: 'Click a button below to lock in your move.' });
+      .setFooter({ text: 'Your selection is only visible to you.' })
+      .setTimestamp();
 
     const rpsRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('rps_rock')    .setLabel('Rock')    .setEmoji('🪨').setStyle(ButtonStyle.Secondary),
@@ -357,7 +385,7 @@ async function handleRps(interaction) {
       const move = moveInteraction.customId.replace('rps_', '');
       moves[userId] = move;
       await moveInteraction.reply({
-        content: `🤫 **${RPS_EMOJI[move]} ${move}** locked in! Waiting for your opponent…`,
+        content: `🔒 **${RPS_EMOJI[move]} ${move}** locked in! Waiting for your opponent…`,
         ephemeral: true,
       });
       if (Object.keys(moves).length === 2) gameCollector.stop('done');
@@ -370,7 +398,8 @@ async function handleRps(interaction) {
             new EmbedBuilder()
               .setColor(0x99AAB5)
               .setTitle('⏱️ Game Timed Out')
-              .setDescription('No result — both players must choose within 2 minutes.'),
+              .setDescription('Neither player chose in time. The match has been cancelled.')
+              .setFooter({ text: 'Run /rps to start a new game.' }),
           ],
           components: [disabledRpsRow],
         });
@@ -386,11 +415,13 @@ async function handleRps(interaction) {
             new EmbedBuilder()
               .setColor(0xFEE75C)
               .setTitle("🤝 It's a Draw!")
-              .setDescription(`Both chose **${RPS_EMOJI[hostMove]} ${hostMove}**. No winner this time!`)
+              .setDescription(`Both players chose **${RPS_EMOJI[hostMove]} ${hostMove}**. Perfectly matched!`)
               .addFields(
                 { name: host.username,       value: `${RPS_EMOJI[hostMove]} ${hostMove}`,             inline: true },
                 { name: challenger.username, value: `${RPS_EMOJI[challengerMove]} ${challengerMove}`, inline: true },
-              ),
+              )
+              .setFooter({ text: 'Run /rps to play again.' })
+              .setTimestamp(),
           ],
           components: [disabledRpsRow],
         });
@@ -404,8 +435,8 @@ async function handleRps(interaction) {
 
       const victoryEmbed = await buildVictoryEmbed(
         winner,
-        '🏆 VICTORY!',
-        `**${winner}** wins!\n\n` +
+        '🏆 Victory!',
+        `**${winner}** wins the round!\n\n` +
         `${winner.username}: ${RPS_EMOJI[winnerMove]} **${winnerMove}**\n` +
         `${loser.username}: ${RPS_EMOJI[loserMove]} **${loserMove}**\n\n` +
         `*${winnerMove} beats ${loserMove}!*`
@@ -421,14 +452,15 @@ async function handleRps(interaction) {
           new EmbedBuilder()
             .setColor(0x99AAB5)
             .setTitle('⚔️ Challenge Expired')
-            .setDescription(`**${host}**'s challenge expired — no one accepted.`),
+            .setDescription(`**${host}**'s challenge went unanswered.`)
+            .setFooter({ text: 'Run /rps to issue a new challenge.' }),
         ],
         components: [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId('rps_accept')
               .setLabel('Challenge Expired')
-              .setEmoji('✔️')
+              .setEmoji('🚫')
               .setStyle(ButtonStyle.Secondary)
               .setDisabled(true)
           ),
@@ -436,241 +468,6 @@ async function handleRps(interaction) {
       });
     }
   });
-}
-
-// ── Command: /tictactoe ───────────────────────────────────────
-
-async function handleTictactoe(interaction) {
-  const host = interaction.user;
-
-  const lobbyEmbed = new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setTitle('⚔️ OPEN CHALLENGE ISSUED ⚔️')
-    .setDescription(`**${host}** is waiting for a challenger!\n\nPress **Accept Challenge** to enter the arena!`)
-    .setFooter({ text: 'First to accept takes the fight.' });
-
-  const acceptRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('ttt_accept')
-      .setLabel('Accept Challenge')
-      .setEmoji('✔️')
-      .setStyle(ButtonStyle.Success)
-  );
-
-  const msg = await interaction.reply({
-    embeds: [lobbyEmbed],
-    components: [acceptRow],
-    fetchReply: true,
-  });
-
-  const acceptCollector = msg.createMessageComponentCollector({
-    componentType: ComponentType.Button,
-    filter: (i) => i.customId === 'ttt_accept' && i.user.id !== host.id,
-    max: 1,
-    time: COLLECTOR_TIMEOUT,
-  });
-
-  acceptCollector.on('collect', async (acceptInteraction) => {
-    const challenger  = acceptInteraction.user;
-    const board       = Array(9).fill('');
-    const players     = { X: host, O: challenger };
-    let   currentMark = 'X';
-
-    function buildGameEmbed(statusLine) {
-      return new EmbedBuilder()
-        .setColor(currentMark === 'X' ? 0xED4245 : 0x5865F2)
-        .setTitle('❌ Tic-Tac-Toe ⭕')
-        .setDescription(
-          `**${players.X}** ❌  vs  ⭕ **${players.O}**\n\n` +
-          (statusLine ?? `It's **${players[currentMark]}'s** turn (${currentMark})`)
-        );
-    }
-
-    await acceptInteraction.update({
-      embeds: [buildGameEmbed()],
-      components: buildTttRows(board),
-    });
-
-    const gameCollector = msg.createMessageComponentCollector({
-      componentType: ComponentType.Button,
-      filter: (i) => i.customId.startsWith('ttt_') && i.customId !== 'ttt_accept',
-      time: COLLECTOR_TIMEOUT,
-    });
-
-    gameCollector.on('collect', async (btnInteraction) => {
-      if (btnInteraction.user.id !== players[currentMark].id) {
-        await btnInteraction.reply({ content: `⛔ It's not your turn!`, ephemeral: true });
-        return;
-      }
-      const idx = parseInt(btnInteraction.customId.split('_')[1]);
-      if (board[idx] !== '') {
-        await btnInteraction.reply({ content: '⚠️ That square is already taken!', ephemeral: true });
-        return;
-      }
-
-      board[idx]     = currentMark;
-      const winner   = checkTttWinner(board);
-      const isDraw   = !winner && board.every((v) => v !== '');
-
-      if (winner) {
-        gameCollector.stop('win');
-        const winPlayer    = players[winner];
-        const victoryEmbed = await buildVictoryEmbed(
-          winPlayer,
-          `🏆 ${winPlayer.username} WINS!`,
-          `**${winPlayer}** has conquered the grid with **${winner}**s!\n\nGG WP! 🎉`
-        );
-        await btnInteraction.update({ embeds: [victoryEmbed], components: buildTttRows(board, true) });
-
-      } else if (isDraw) {
-        gameCollector.stop('draw');
-        await btnInteraction.update({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0xFEE75C)
-              .setTitle("🤝 It's a Draw!")
-              .setDescription(`**${players.X}** and **${players.O}** fought to a stalemate!\n\nNo winner this time.`),
-          ],
-          components: buildTttRows(board, true),
-        });
-
-      } else {
-        currentMark = currentMark === 'X' ? 'O' : 'X';
-        await btnInteraction.update({
-          embeds: [buildGameEmbed()],
-          components: buildTttRows(board),
-        });
-      }
-    });
-
-    gameCollector.on('end', async (_, reason) => {
-      if (reason === 'time') {
-        await msg.edit({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(0x99AAB5)
-              .setTitle('⏱️ Game Timed Out')
-              .setDescription('The game ended due to inactivity.'),
-          ],
-          components: buildTttRows(board, true),
-        });
-      }
-    });
-  });
-
-  acceptCollector.on('end', async (collected) => {
-    if (collected.size === 0) {
-      await msg.edit({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x99AAB5)
-            .setTitle('⚔️ Challenge Expired')
-            .setDescription(`**${host}**'s challenge expired — no one accepted.`),
-        ],
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('ttt_accept')
-              .setLabel('Challenge Expired')
-              .setEmoji('✔️')
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(true)
-          ),
-        ],
-      });
-    }
-  });
-}
-
-// ── Command: /bep20history ────────────────────────────────────
-
-async function handleBep20History(interaction) {
-  await interaction.deferReply();
-
-  const wallet = process.env.RECEIVER_WALLET_ADDRESS;
-  const rpcUrl = process.env.BSC_RPC_URL;
-  const limit  = interaction.options.getInteger('limit') ?? 5;
-
-  if (!wallet || !rpcUrl) {
-    await interaction.editReply('❌ Payment system is not configured. Contact the server admin.');
-    return;
-  }
-
-  // ── Connect to BSC ────────────────────────────────────────
-  let provider;
-  try {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 8000);
-    provider = new ethers.JsonRpcProvider(rpcUrl);
-    await provider.getBlockNumber();
-    clearTimeout(t);
-  } catch {
-    await interaction.editReply('API is currently down, please try again later.');
-    return;
-  }
-
-  // ── Query Transfer events ─────────────────────────────────
-  try {
-    const currentBlock = await provider.getBlockNumber();
-    const LOOKBACK     = 5000; // ~4 hours on BSC at ~3 s/block
-    const fromBlock    = Math.max(0, currentBlock - LOOKBACK);
-
-    const usdtContract = new ethers.Contract(USDT_BSC_ADDRESS, ERC20_ABI, provider);
-    const filter       = usdtContract.filters.Transfer(null, wallet);
-    const events       = await usdtContract.queryFilter(filter, fromBlock, currentBlock);
-
-    const shortWallet = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
-    const hoursBack   = Math.round((LOOKBACK * 3) / 3600);
-
-    if (events.length === 0) {
-      await interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0x99AAB5)
-            .setTitle('📋 Payment History')
-            .setDescription(
-              `No USDT received in the last ~${hoursBack} hours.\n\n` +
-              `> Wallet: \`${wallet}\``
-            )
-            .setFooter({ text: 'BNB Smart Chain (BEP20)' }),
-        ],
-      });
-      return;
-    }
-
-    // Most recent `limit` events, newest first
-    const recent = [...events].reverse().slice(0, limit);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x26A17B)
-      .setTitle('📋 Recent USDT Payments Received')
-      .setDescription(
-        `**${recent.length}** of **${events.length}** transaction(s) found in the last ~${hoursBack} hours.\n` +
-        `Wallet: \`${shortWallet}\``
-      )
-      .setFooter({ text: 'BNB Smart Chain (BEP20) • Amounts in USDT' })
-      .setTimestamp();
-
-    for (const event of recent) {
-      const amount    = parseFloat(ethers.formatUnits(event.args.value, USDT_DECIMALS));
-      const txHash    = event.transactionHash;
-      const from      = event.args.from;
-      const shortFrom = `${from.slice(0, 6)}…${from.slice(-4)}`;
-      const shortTx   = `${txHash.slice(0, 8)}…${txHash.slice(-6)}`;
-
-      embed.addFields({
-        name:   `💰 ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDT`,
-        value:  `From: \`${shortFrom}\`\n[${shortTx}](https://bscscan.com/tx/${txHash})`,
-        inline: true,
-      });
-    }
-
-    await interaction.editReply({ embeds: [embed] });
-
-  } catch (err) {
-    console.error('bep20history error:', err);
-    await interaction.editReply('API is currently down, please try again later.');
-  }
 }
 
 // ── Command: /bep20 ───────────────────────────────────────────
@@ -678,22 +475,28 @@ async function handleBep20History(interaction) {
 async function handleBep20(interaction) {
   await interaction.deferReply();
 
-  const amount  = interaction.options.getNumber('amount');
-  const wallet  = process.env.RECEIVER_WALLET_ADDRESS;
-  const rpcUrl  = process.env.BSC_RPC_URL;
+  const wallet = process.env.RECEIVER_WALLET_ADDRESS;
+  const amount = interaction.options.getNumber('amount');
+  const rpcUrl = process.env.BSC_RPC_URL ?? 'https://bsc-dataseed.binance.org/';
 
-  if (!wallet || !rpcUrl) {
-    await interaction.editReply('❌ Payment system is not configured. Contact the server admin.');
+  if (!wallet || !ethers.isAddress(wallet)) {
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xED4245)
+          .setTitle('❌ Wallet Not Configured')
+          .setDescription('The receiver wallet address is not configured. Contact the server admin.')
+          .setFooter({ text: 'Admin: set the RECEIVER_WALLET_ADDRESS environment secret.' }),
+      ],
+    });
     return;
   }
 
-  // ── Generate QR code ─────────────────────────────────────
   let qrBuffer;
   try {
     qrBuffer = await QRCode.toBuffer(wallet, {
-      type: 'png',
+      errorCorrectionLevel: 'H',
       width: 300,
-      margin: 2,
       color: { dark: '#000000', light: '#ffffff' },
     });
   } catch (err) {
@@ -775,7 +578,6 @@ async function handleBep20(interaction) {
     try {
       const currentBlock = await provider.getBlockNumber();
       if (currentBlock <= startBlock) return;
-
       const filter = usdtContract.filters.Transfer(null, wallet);
       const events  = await usdtContract.queryFilter(filter, startBlock, currentBlock);
 
@@ -816,6 +618,259 @@ async function handleBep20(interaction) {
     }
 
   }, POLL_INTERVAL);
+}
+
+// ── Command: /bep20history ────────────────────────────────────
+
+async function handleBep20History(interaction) {
+  await interaction.deferReply();
+
+  const wallet = process.env.RECEIVER_WALLET_ADDRESS;
+  const rpcUrl = process.env.BSC_RPC_URL;
+  const limit  = interaction.options.getInteger('limit') ?? 5;
+
+  if (!wallet || !rpcUrl) {
+    await interaction.editReply('❌ Payment system is not configured. Contact the server admin.');
+    return;
+  }
+
+  let provider;
+  try {
+    provider = new ethers.JsonRpcProvider(rpcUrl);
+    await provider.getBlockNumber();
+  } catch {
+    await interaction.editReply('API is currently down, please try again later.');
+    return;
+  }
+
+  try {
+    const currentBlock = await provider.getBlockNumber();
+    const LOOKBACK     = 5000; // ~4 hours on BSC at ~3 s/block
+    const fromBlock    = Math.max(0, currentBlock - LOOKBACK);
+
+    const usdtContract = new ethers.Contract(USDT_BSC_ADDRESS, ERC20_ABI, provider);
+    const filter       = usdtContract.filters.Transfer(null, wallet);
+    const events       = await usdtContract.queryFilter(filter, fromBlock, currentBlock);
+
+    const shortWallet = `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+    const hoursBack   = Math.round((LOOKBACK * 3) / 3600);
+
+    if (events.length === 0) {
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x99AAB5)
+            .setTitle('📋 Payment History')
+            .setDescription(
+              `No USDT received in the last ~${hoursBack} hours.\n\n` +
+              `> Wallet: \`${wallet}\``
+            )
+            .setFooter({ text: 'BNB Smart Chain (BEP20)' }),
+        ],
+      });
+      return;
+    }
+
+    const recent = [...events].reverse().slice(0, limit);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x26A17B)
+      .setTitle('📋 Recent USDT Payments Received')
+      .setDescription(
+        `**${recent.length}** of **${events.length}** transaction(s) found in the last ~${hoursBack} hours.\n` +
+        `Wallet: \`${shortWallet}\``
+      )
+      .setFooter({ text: 'BNB Smart Chain (BEP20) • Amounts in USDT' })
+      .setTimestamp();
+
+    for (const event of recent) {
+      const amount    = parseFloat(ethers.formatUnits(event.args.value, USDT_DECIMALS));
+      const txHash    = event.transactionHash;
+      const from      = event.args.from;
+      const shortFrom = `${from.slice(0, 6)}…${from.slice(-4)}`;
+      const shortTx   = `${txHash.slice(0, 8)}…${txHash.slice(-6)}`;
+
+      embed.addFields({
+        name:   `💰 ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDT`,
+        value:  `From: \`${shortFrom}\`\n[${shortTx}](https://bscscan.com/tx/${txHash})`,
+        inline: true,
+      });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+
+  } catch (err) {
+    console.error('bep20history error:', err);
+    await interaction.editReply('API is currently down, please try again later.');
+  }
+}
+
+// ── Command: /tictactoe ───────────────────────────────────────
+
+async function handleTictactoe(interaction) {
+  const host = interaction.user;
+
+  const lobbyEmbed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle('⬜ Open Tic-Tac-Toe Challenge')
+    .setDescription(`**${host}** wants to play Tic-Tac-Toe!\n\nPress **Accept** to be their opponent.`)
+    .setFooter({ text: 'Challenge expires in 2 minutes.' })
+    .setTimestamp();
+
+  const acceptRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ttt_accept')
+      .setLabel('Accept Challenge')
+      .setEmoji('✏️')
+      .setStyle(ButtonStyle.Success)
+  );
+
+  const msg = await interaction.reply({
+    embeds: [lobbyEmbed],
+    components: [acceptRow],
+    fetchReply: true,
+  });
+
+  const acceptCollector = msg.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    filter: (i) => i.customId === 'ttt_accept' && i.user.id !== host.id,
+    max: 1,
+    time: COLLECTOR_TIMEOUT,
+  });
+
+  acceptCollector.on('collect', async (acceptInteraction) => {
+    const challenger = acceptInteraction.user;
+    const board      = Array(9).fill('');
+    const players    = { X: host, O: challenger };
+    let currentPlayer = host; // host is always X and goes first
+
+    const symbols = { [host.id]: 'X', [challenger.id]: 'O' };
+
+    const turnEmbed = () =>
+      new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('⬜ Tic-Tac-Toe')
+        .setDescription(
+          `**${players.X}** ❌  vs  **${players.O}** ⭕\n\n` +
+          `It's **${currentPlayer}**'s turn!`
+        )
+        .setFooter({ text: 'Click an empty square to place your mark.' })
+        .setTimestamp();
+
+    await acceptInteraction.update({
+      embeds: [turnEmbed()],
+      components: buildTttRows(board),
+    });
+
+    const gameCollector = msg.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      filter: (i) =>
+        i.customId.startsWith('ttt_') &&
+        i.customId !== 'ttt_accept' &&
+        (i.user.id === host.id || i.user.id === challenger.id),
+      time: COLLECTOR_TIMEOUT,
+    });
+
+    gameCollector.on('collect', async (moveInteraction) => {
+      if (moveInteraction.user.id !== currentPlayer.id) {
+        await moveInteraction.reply({ content: "⚠️ It's not your turn!", ephemeral: true });
+        return;
+      }
+
+      const idx = parseInt(moveInteraction.customId.replace('ttt_', ''), 10);
+      if (board[idx] !== '') {
+        await moveInteraction.reply({ content: '⚠️ That cell is already taken!', ephemeral: true });
+        return;
+      }
+
+      board[idx] = symbols[currentPlayer.id];
+
+      const winner  = checkTttWinner(board);
+      const isFull  = board.every((cell) => cell !== '');
+
+      if (winner) {
+        gameCollector.stop('winner');
+        const winnerUser  = players[winner];
+        const winnerEmoji = winner === 'X' ? '❌' : '⭕';
+        const victoryEmbed = await buildVictoryEmbed(
+          winnerUser,
+          `${winnerEmoji} ${winnerUser.username} Wins!`,
+          `**${winnerUser}** wins the Tic-Tac-Toe match!\n\n` +
+          `**${players.X}** ❌  vs  **${players.O}** ⭕`
+        );
+        await moveInteraction.update({
+          embeds: [victoryEmbed],
+          components: buildTttRows(board, true),
+        });
+        return;
+      }
+
+      if (isFull) {
+        gameCollector.stop('draw');
+        await moveInteraction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0xFEE75C)
+              .setTitle("🤝 It's a Draw!")
+              .setDescription(
+                `**${players.X}** ❌  vs  **${players.O}** ⭕\n\n` +
+                `No moves left — perfectly matched!`
+              )
+              .setFooter({ text: 'Run /tictactoe to play again.' })
+              .setTimestamp(),
+          ],
+          components: buildTttRows(board, true),
+        });
+        return;
+      }
+
+      // Advance to the next player's turn
+      currentPlayer = currentPlayer.id === host.id ? challenger : host;
+      await moveInteraction.update({
+        embeds: [turnEmbed()],
+        components: buildTttRows(board),
+      });
+    });
+
+    gameCollector.on('end', async (_, reason) => {
+      if (reason === 'time') {
+        await msg.edit({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(0x99AAB5)
+              .setTitle('⏱️ Game Timed Out')
+              .setDescription('A player took too long. The match has been cancelled.')
+              .setFooter({ text: 'Run /tictactoe to start a new game.' }),
+          ],
+          components: buildTttRows(board, true),
+        }).catch(() => {});
+      }
+    });
+  });
+
+  acceptCollector.on('end', async (collected) => {
+    if (collected.size === 0) {
+      await msg.edit({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0x99AAB5)
+            .setTitle('⬜ Challenge Expired')
+            .setDescription(`**${host}**'s Tic-Tac-Toe challenge went unanswered.`)
+            .setFooter({ text: 'Run /tictactoe to issue a new challenge.' }),
+        ],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('ttt_accept')
+              .setLabel('Challenge Expired')
+              .setEmoji('🚫')
+              .setStyle(ButtonStyle.Secondary)
+              .setDisabled(true)
+          ),
+        ],
+      }).catch(() => {});
+    }
+  });
 }
 
 // ── Interaction Router ────────────────────────────────────────
@@ -867,4 +922,4 @@ client.once('clientReady', () => {
   });
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN); 
